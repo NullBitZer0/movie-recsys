@@ -15,7 +15,7 @@ class PopularityRecommender:
             rating_count=('rating', 'count')
         ).reset_index()
 
-        min_votes = stats['rating_count'].quantile(0.9)
+        min_votes = 50
         qualified = stats[stats['rating_count'] >= min_votes]
 
         C = qualified['avg_rating'].mean()
