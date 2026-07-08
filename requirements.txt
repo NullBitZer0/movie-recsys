@@ -6,4 +6,3 @@ streamlit
 matplotlib
 seaborn
 requests
-ydata-profiling
