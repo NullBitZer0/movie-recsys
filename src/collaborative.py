@@ -13,6 +13,8 @@ class CollaborativeRecommender:
         self.movies = load_movies()
         self.trainset = None
         self.testset = None
+        self.train_data = None
+        self.test_data = None
         self._build_model()
 
     def _build_model(self):
@@ -20,6 +22,7 @@ class CollaborativeRecommender:
         data = Dataset.load_from_df(
             self.ratings[['userId', 'movieId', 'rating']], reader
         )
+        self.train_data, self.test_data = train_test_split(data, test_size=0.2, random_state=42)
         self.trainset = data.build_full_trainset()
         self.model.fit(self.trainset)
 
@@ -53,3 +56,48 @@ class CollaborativeRecommender:
         rmse = accuracy.rmse(predictions, verbose=False)
         mae = accuracy.mae(predictions, verbose=False)
         return {'rmse': rmse, 'mae': mae}
+
+    def precision_recall_at_k(self, k=10, threshold=3.5):
+        user_est_true = {}
+        for uid, iid, true_r, est, _ in self.model.test(self.trainset.build_anti_testset()[:10000]):
+            if uid not in user_est_true:
+                user_est_true[uid] = []
+            user_est_true[uid].append((est, true_r))
+
+        precisions = {}
+        recalls = {}
+        for uid, user_ratings in user_est_true.items():
+            user_ratings.sort(key=lambda x: x[0], reverse=True)
+            n_rel = sum((true_r >= threshold) for (_, true_r) in user_ratings)
+            n_rec_k = sum((est >= threshold) for (est, _) in user_ratings[:k])
+            n_rel_and_rec_k = sum(
+                ((true_r >= threshold) and (est >= threshold))
+                for (est, true_r) in user_ratings[:k]
+            )
+            precisions[uid] = n_rel_and_rec_k / n_rec_k if n_rec_k != 0 else 0
+            recalls[uid] = n_rel_and_rec_k / n_rel if n_rel != 0 else 0
+
+        precision = sum(p for p in precisions.values()) / len(precisions)
+        recall = sum(r for r in recalls.values()) / len(recalls)
+        return {'precision@k': precision, 'recall@k': recall}
+
+    def ndcg_at_k(self, k=10, threshold=3.5):
+        user_est_true = {}
+        for uid, iid, true_r, est, _ in self.model.test(self.trainset.build_anti_testset()[:10000]):
+            if uid not in user_est_true:
+                user_est_true[uid] = []
+            user_est_true[uid].append((est, true_r))
+
+        ndcgs = []
+        for uid, user_ratings in user_est_true.items():
+            user_ratings.sort(key=lambda x: x[0], reverse=True)
+            relevance = [1 if true_r >= threshold else 0 for (_, true_r) in user_ratings[:k]]
+
+            dcg = sum(rel / np.log2(i + 2) for i, rel in enumerate(relevance))
+            ideal_relevance = sorted(relevance, reverse=True)
+            idcg = sum(rel / np.log2(i + 2) for i, rel in enumerate(ideal_relevance))
+
+            ndcg = dcg / idcg if idcg > 0 else 0
+            ndcgs.append(ndcg)
+
+        return {'ndcg@k': np.mean(ndcgs)}
