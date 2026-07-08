@@ -2,12 +2,31 @@ import streamlit as st
 import pandas as pd
 from src.recommend import MovieRecommender
 from src.preprocess import load_movies, load_ratings
+from src.tmdb import get_poster_url
 
 st.set_page_config(page_title="MovieLens Recommender", page_icon="🎬", layout="wide")
 
 @st.cache_resource
 def load_recommender():
     return MovieRecommender()
+
+def display_movie_card(title, genres, score_label, score_value, movie_id=None):
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        if movie_id:
+            poster_url = get_poster_url(movie_id)
+            if poster_url:
+                st.image(poster_url, width=120)
+            else:
+                st.image("https://via.placeholder.com/120x180?text=No+Poster", width=120)
+        else:
+            st.image("https://via.placeholder.com/120x180?text=No+Poster", width=120)
+
+    with col2:
+        st.markdown(f"**{title}**")
+        st.caption(f"Genres: {genres}")
+        st.metric(score_label, f"{score_value:.2f}" if isinstance(score_value, float) else score_value)
 
 def main():
     st.title("🎬 MovieLens Recommender System")
@@ -31,13 +50,23 @@ def main():
                 recs = recommender.get_content_recommendations(selected_movie, top_n=10)
 
             st.subheader(f"Movies similar to: {selected_movie}")
+
+            selected_movie_data = movies[movies['title'] == selected_movie]
+            if not selected_movie_data.empty:
+                selected_id = selected_movie_data.iloc[0]['movieId']
+                poster_url = get_poster_url(selected_id)
+                if poster_url:
+                    st.image(poster_url, width=200)
+
             for _, row in recs.iterrows():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{row['title']}**")
-                    st.caption(f"Genres: {row['genres']}")
-                with col2:
-                    st.metric("Similarity", f"{row['similarity']:.2f}")
+                display_movie_card(
+                    row['title'],
+                    row['genres'],
+                    "Similarity",
+                    row['similarity'],
+                    row['movieId']
+                )
+                st.divider()
 
     with tab2:
         st.header("Collaborative Filtering Recommendations")
@@ -56,13 +85,16 @@ def main():
                 recs = recommender.get_collaborative_recommendations(user_id, top_n=10)
 
             st.subheader(f"Recommended for User {user_id}")
+
             for _, row in recs.iterrows():
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{row['title']}**")
-                    st.caption(f"Genres: {row['genres']}")
-                with col2:
-                    st.metric("Predicted Rating", f"{row['predicted_rating']:.2f}")
+                display_movie_card(
+                    row['title'],
+                    row['genres'],
+                    "Predicted Rating",
+                    row['predicted_rating'],
+                    row['movieId']
+                )
+                st.divider()
 
     with tab3:
         st.header("Hybrid Recommendations")
@@ -88,8 +120,23 @@ def main():
                 )
 
             st.subheader(f"Hybrid Recommendations based on: {selected_movie_hybrid}")
+
+            selected_movie_data = movies[movies['title'] == selected_movie_hybrid]
+            if not selected_movie_data.empty:
+                selected_id = selected_movie_data.iloc[0]['movieId']
+                poster_url = get_poster_url(selected_id)
+                if poster_url:
+                    st.image(poster_url, width=200)
+
             for _, row in recs.iterrows():
-                st.write(f"**{row['title']}** - {row['genres']}")
+                display_movie_card(
+                    row['title'],
+                    row['genres'],
+                    "Score",
+                    0,
+                    row['movieId']
+                )
+                st.divider()
 
     st.markdown("---")
     st.sidebar.header("Dataset Stats")
